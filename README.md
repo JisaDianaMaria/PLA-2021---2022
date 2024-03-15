@@ -1,5 +1,5 @@
 # PLA-2021-2022
-Proiect in limbaj de asamblare
+Proiect in limbaj de asamblare.
 Aplicatie calculator de buzunar in baza 16
 
 Cerinte:
