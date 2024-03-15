@@ -1,21 +1,18 @@
 # PLA-2021-2022
-Proiect in limbaj de asamblare.
-Aplicatie calculator de buzunar in baza 16
+Assembly language project.
+Pocket calculator application in base 16.
 
-Cerinte:
-Sa se realizeze un program care executa functiile unui calculator de buzunar cu operatii aritmetice si logice (cu intregi pe 32 de biti) in hexazecimal. Operatiile 
-trebuie sa fie implementate in functii. 
-Operatii cerute +, -, *, /.
-Utilizatorul va introduce de la tastatura expresiile pe care doreste sa le calculeze. Semnul "=" inseamna ca expresia trebuie sa fie calculata si rezultatul afisat 
-pe ecran. Daca expresia incepe cu un operator, primul operand este considerat ca fiind egal cu ultimul rezultat obtinut. Daca anterior nu s-a calculat nici un 
-rezultat, operandul se considera a fi 0. Programul va recunoaste comanda exit(terminarea programului). Pana la primirea comenzii exit, programul va rula in continuu.
-O expresie contine oricati operanzi. Inmultirea si impartirea sunt prioritare.
+Requirements:
+Develop a program that executes the functions of a pocket calculator with arithmetic and logical operations (with 32-bit integers) in hexadecimal. The operations must be implemented as functions.
+Requested operations: +, -, *, /.
+The user will input expressions from the keyboard that they want to calculate. The "=" sign means that the expression should be calculated, and the result displayed on the screen. If the expression starts with an operator, the first operand is considered to be equal to the last result obtained. If no result has been calculated previously, the operand is considered to be 0. The program will recognize the "exit" command (terminating the program). Until the "exit" command is received, the program will run continuously.
+An expression can contain any number of operands. Multiplication and division take precedence.
 
-Exemplu:
->Introduceti o expresie:
+Example:
+>Enter an expression:
 >2+3-2*2=1
->Introduceti o expresie:
+>Enter an expression:
 >+0A=0B
->Introduceti o expresie:
+>Enter an expression:
 >exit
 
