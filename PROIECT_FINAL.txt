@@ -1,0 +1,362 @@
+.386
+.model flat, stdcall
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;includem biblioteci, si declaram ce functii vrem sa importam
+includelib msvcrt.lib
+extern exit: proc
+extern gets: proc
+extern printf: proc
+extern strlen: proc
+extern strcmp: proc
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;declaram simbolul start ca public - de acolo incepe executia
+public start
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;sectiunile programului, date, respectiv cod
+.data
+;aici declaram date
+
+result dd 0
+
+;operation codes
+OPERATION_ADD equ 01h
+OPERATION_SUB equ 02h
+OPERATION_MUL equ 03h
+OPERATION_DIV equ 04h
+
+;lists for operation and operator found in user string
+operation_stack db 128 dup(0) ; lista pentru operatii
+operation_stack_size dd 0
+operator_stack dd 128 dup(0)  ; lista pentru operatori
+operator_stack_size dd 0
+
+;stinguri pentru afisare
+first_character dd 0
+user_string db 1024 dup(0)
+user_string_length dd 0
+expression_input_string db "Introduceti expresia care sa fie evaluata:", 0Ah, 0
+exit_string db "EXIT", 0
+result_output_string db "Rezultatul expresiei este: %X", 0Ah, 0
+zero_division_error db "ERROR: zero division !", 0Ah,  0
+
+.code
+
+
+; parcurgem șirul utilizatorului și il transformam in majuscule 
+user_string_to_upper proc
+	push ebp
+	mov ebp, esp
+	
+	xor ecx, ecx
+	for_to_upper:
+		
+		mov al, [user_string + ecx]
+		
+		cmp al, 'a'
+		jl skip_upper 
+		
+		cmp al, 'z'
+		jg skip_upper
+		
+		sub al, 'a'
+		add al, 'A'
+		
+		skip_upper:
+		mov [user_string + ecx], al
+		inc ecx
+	cmp ecx, user_string_length
+	jl for_to_upper
+	
+	mov esp, ebp
+	pop ebp
+	ret
+user_string_to_upper endp
+
+;procedura verifica daca userul a introdus exit cu strcm, iar rezultatul este returnat in EAX (0 inseamna ca sunt egali)
+is_exit_command proc
+	push ebp
+	mov ebp, esp
+	
+	push offset user_string
+	push offset exit_string
+	call strcmp
+	add esp, 8
+	
+	mov esp, ebp
+	pop ebp
+	ret
+is_exit_command endp
+
+;evaluează lista prin procesarea tuturor operațiilor fără adunare
+;și apoi adaugă operatorii găsiți în listă
+; Exemplu:
+; 2 - 3 * 3 * 3 =
+; lista de operațiuni: 2,3,3
+; Lista operatorilor: 2, 3, 3, 3
+; primul pentru:
+; 2 -3 3 3
+; a doua pentru:
+; 2 0 -9 3
+; al treilea pentru:
+; 2 0 0 -27
+; după aceea, funcția adaugă toți operatorii din listă
+evaluate_stack proc
+	push ebp
+	mov ebp, esp
+	
+	xor ecx, ecx
+	for_stack_evaluation:
+		
+		mov dl, [operation_stack + ecx]
+		
+		cmp dl, OPERATION_SUB
+		jne skip_sub
+		
+		mov ebx, [operator_stack + ecx * 4 + 4]
+		xor eax, eax
+		sub eax, ebx
+		mov dword ptr [operator_stack + ecx * 4 + 4], eax
+		
+		skip_sub:
+		
+		cmp dl, OPERATION_MUL
+		jne skip_mul
+		
+		xor edx, edx
+		mov eax, [operator_stack + ecx * 4]
+		mov ebx, [operator_stack + ecx * 4 + 4]
+		
+		mul ebx
+		
+		mov dword ptr [operator_stack + ecx * 4], 0
+		mov dword ptr [operator_stack + ecx * 4 + 4], eax
+		
+		skip_mul:
+		
+		cmp dl, OPERATION_DIV
+		jne skip_div
+		
+		xor edx, edx
+		mov eax, [operator_stack + ecx * 4]
+		mov ebx, [operator_stack + ecx * 4 + 4]
+		
+		cmp ebx, 0
+		jne non_0_division ; verifica sa nu fie impartire la 0
+		
+		push offset zero_division_error
+		call printf
+		add esp, 4
+		
+		push 1
+		call exit
+		
+		non_0_division:
+		div ebx
+		
+		mov dword ptr [operator_stack + ecx * 4], 0 ;sa pun 0 pe primul 
+		mov dword ptr [operator_stack + ecx * 4 + 4], eax ;sa pun impartirea pe al doilea operand 
+		
+		skip_div:
+		mov [operation_stack + ecx], OPERATION_ADD ;punem in stiva de operatii, operatia de adunare
+		inc ecx
+	cmp ecx, operation_stack_size ;verific daca am ajund la finalul stivei
+	jl for_stack_evaluation
+	
+	mov ecx, operator_stack_size ;adun tot ce e pe stiva
+	mov esi, offset operator_stack
+	xor ebx, ebx ;tin rezultatul final
+	for_add_stack:
+		
+		lodsd ;pune in EAX automat
+		add ebx, eax
+		
+	loop for_add_stack
+	
+	mov result, ebx
+	
+	push ebx ; printez rezultatul
+	push offset result_output_string
+	call printf
+	add esp, 8
+	
+	xor eax, eax
+	mov operation_stack_size, eax
+	mov operator_stack_size, eax
+	
+	mov esp, ebp
+	pop ebp
+	ret
+evaluate_stack endp
+
+;folosind convenția fastcall
+;un parametru trecut în registrul ecx (caracterul care trebuie evaluat)
+evaluate_character proc
+	push ebp
+	mov ebp, esp
+	
+	cmp cl, '+'
+	jne non_add_tag   ;daca nu e plus sare si verifica daca este minus
+	mov al, OPERATION_ADD
+	jmp add_operation_to_stack   ;daca e plus sara la eticheta si adauga pe stiva "+"
+	
+	non_add_tag:
+	cmp cl, '-'
+	jne non_sub_tag
+	mov al, OPERATION_SUB
+	jmp add_operation_to_stack
+	
+	non_sub_tag:
+	cmp cl, '*'
+	jne non_mul_tag
+	mov al, OPERATION_MUL
+	jmp add_operation_to_stack
+	
+	non_mul_tag:
+	cmp cl, '/'
+	jne non_div_tag  ; daca nu e nici div, atunci nu este operatie si sare peste tot
+	mov al, OPERATION_DIV
+	
+	add_operation_to_stack:
+	mov ebx, result
+	mov edx, operator_stack_size
+	mov [operator_stack + edx * 4], ebx
+	inc operator_stack_size
+	
+	xor ebx, ebx
+	mov result, ebx
+	
+	mov edx, operation_stack_size
+	mov [operation_stack + edx], al
+	inc operation_stack_size
+	
+	jmp skip_stack_evaluation ; evaluez lista doar cand dau peste un egal
+	non_div_tag:
+	
+	cmp cl, '0'  ;verific daca e intre 0 si 9
+	jl non_09_tag
+	
+	cmp cl, '9'
+	jg non_09_tag
+	
+	mov al, cl
+	sub al, '0' ; determin valoarea exacta, nu ASCII
+	
+	jmp compute_new_result ; daca este cifra sar peste partea asta
+	
+	non_09_tag: ;verific daca e intre A si F
+	cmp cl, 'A'
+	jl non_af_tag
+	
+	cmp cl, 'F'
+	jg non_af_tag
+	
+	mov al, cl
+	sub al, 'A'
+	add al, 10
+	
+	compute_new_result: ;verific primul caracter
+	
+	mov ebx, first_character
+	cmp ebx, 0
+	je skip_result_reset
+	
+	xor ebx, ebx
+	mov result, ebx
+	
+	skip_result_reset: ;computam noul rezultat
+	
+	mov ebx, result
+	shl ebx, 4 ;*16
+	add ebx, eax ;adun caracterul
+	mov result, ebx
+	
+	jmp skip_stack_evaluation
+	
+	non_af_tag:
+	cmp cl, '=' ; verific daca este egal
+	jne skip_stack_evaluation
+	mov ebx, result ; daca e egal pun rezultatul pe stack
+	mov edx, operator_stack_size
+	mov [operator_stack + edx * 4], ebx ;DD
+	inc operator_stack_size
+	
+	xor ebx, ebx
+	mov result, ebx
+	
+	call evaluate_stack
+	
+	skip_stack_evaluation:
+	;ignoram caracterele care nu sunt operaționale, caracterele non hexazecimale și caracterele care nu sunt „="
+	xor eax, eax
+	mov first_character, eax ;resetez primul caracter
+	mov esp, ebp
+	pop ebp
+	ret
+evaluate_character endp
+
+
+;parcurg expresia de la user si dau call function pentru fiecare caracter
+evaluate_expression proc
+	push ebp
+	mov ebp, esp
+	
+	mov ecx, user_string_length
+	mov esi, offset user_string
+	user_string_loop:
+		
+		lodsb
+		
+		push ecx
+		
+		xor ecx, ecx
+		mov cl, al
+		call evaluate_character
+		
+		pop ecx
+		
+	loop user_string_loop
+	
+	mov esp, ebp
+	pop ebp
+	ret
+evaluate_expression endp
+
+start:
+	;citecesc expresia introdusa de utilizator si o evaluez
+	
+	main_loop:
+		mov eax, 1
+		mov first_character, eax ; pentru primul caracter
+		
+		push offset expression_input_string
+		call printf
+		add esp, 4
+		
+		;citim cu gets pentru a putea citi cu spatii 
+		push offset user_string
+		call gets
+		add esp, 4
+		
+		push offset user_string ;determin lungimea sirului
+		call strlen
+		add esp, 4
+		
+		mov user_string_length, eax
+		
+		call user_string_to_upper
+		call is_exit_command
+		
+		cmp eax, 0
+		je exit_loop
+
+		call evaluate_expression
+		
+	jmp main_loop
+	
+	exit_loop:
+		push 0
+		call exit
+end start
